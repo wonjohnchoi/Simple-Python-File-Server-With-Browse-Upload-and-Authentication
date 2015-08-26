@@ -212,6 +212,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_error(404, "No permission to list directory")
             return None
         list.sort(key=lambda a: a.lower())
+        list = ['..'] + list
         f = StringIO()
         displaypath = cgi.escape(urllib.unquote(self.path))
         f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
