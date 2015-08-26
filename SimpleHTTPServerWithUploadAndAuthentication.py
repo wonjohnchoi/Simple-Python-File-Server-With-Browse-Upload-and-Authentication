@@ -25,7 +25,10 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+import sys
+import base64
 
+key = ""
 
 class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
@@ -43,20 +46,46 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     server_version = "SimpleHTTPWithUpload/" + __version__
 
-    def do_GET(self):
-        """Serve a GET request."""
-        f = self.send_head()
-        if f:
-            self.copyfile(f, self.wfile)
-            f.close()
-
     def do_HEAD(self):
         """Serve a HEAD request."""
         f = self.send_head()
         if f:
             f.close()
 
+    def is_authenticated(self):
+        global key
+        auth_header = self.headers.getheader('Authorization')
+        return auth_header and auth_header == 'Basic ' + key
+
+    def do_AUTHHEAD(self):
+        self.send_response(401)
+        self.send_header('WWW-Authenticate', 'Basic realm=\"Test\"')
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+
+    def try_authenticate(self):
+        if not self.is_authenticated():
+            self.do_AUTHHEAD()
+            print 'not authenticated'
+            self.wfile.write('not authenticated')
+            return False
+        return True
+
+    def do_GET(self):
+        if not self.try_authenticate():
+            return
+        print 'authenticated'
+
+        f = self.send_head()
+        if f:
+            self.copyfile(f, self.wfile)
+            f.close()
+
     def do_POST(self):
+        if not self.try_authenticate():
+            return
+        print 'authenticated'
+
         """Serve a POST request."""
         r, info = self.deal_post_data()
         print r, info, "by: ", self.client_address
@@ -83,7 +112,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if f:
             self.copyfile(f, self.wfile)
             f.close()
-        
+
     def deal_post_data(self):
         boundary = self.headers.plisttext.split("=")[1]
         remainbytes = int(self.headers['content-length'])
@@ -106,7 +135,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             out = open(fn, 'wb')
         except IOError:
             return (False, "Can't create file to write, do you have permission to write?")
-                
+
         preline = self.rfile.readline()
         remainbytes -= len(preline)
         while remainbytes > 0:
@@ -152,6 +181,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             else:
                 return self.list_directory(path)
         ctype = self.guess_type(path)
+        print self.path, path
         try:
             # Always read in binary mode. Opening files in text mode may cause
             # newline translations, making the actual size of the content
@@ -214,6 +244,10 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return f
 
     def translate_path(self, path):
+        # '/fs/' => '/'
+        # '/fs/home/' => '/home/'
+        return path[3:]
+
         """Translate a /-separated PATH to the local filename syntax.
 
         Components that mean special things to the local file system
@@ -285,10 +319,14 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         '.h': 'text/plain',
         })
 
-
-def test(HandlerClass = SimpleHTTPRequestHandler,
-         ServerClass = BaseHTTPServer.HTTPServer):
-    BaseHTTPServer.test(HandlerClass, ServerClass)
-
 if __name__ == '__main__':
-    test()
+    if len(sys.argv) != 3:
+        print 'usage SimpleHTTPServerWithUploadAndAuthentication.py [port] [username:password]'
+    else:
+        port = int(sys.argv[1])
+        key = base64.b64encode(sys.argv[2])
+        print 'listening on localhost:%d with key %s' %(port, key)
+        server = BaseHTTPServer.HTTPServer(('localhost', port), SimpleHTTPRequestHandler)
+
+        print 'Starting server, use <Ctrl-C> to stop'
+        server.serve_forever()
