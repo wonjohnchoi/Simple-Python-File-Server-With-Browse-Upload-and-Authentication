@@ -1,0 +1,4 @@
+#!/bin/sh
+service simple-file-server stop
+rm -rf /etc/init/simple-file-server.conf
+rm -rf /etc/simple-file-server

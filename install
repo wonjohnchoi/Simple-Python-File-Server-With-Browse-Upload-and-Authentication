@@ -1,0 +1,23 @@
+#!/bin/bash
+./uninstall
+
+read -p "Enter which port to use (ex. 5000): " PORT
+read -p "Enter which id to use (ex. admin): " ID
+read -p "Enter which password to use (ex. mypassword): " PASSWORD
+
+cat >/etc/init/simple-file-server.conf <<EOL
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+exec /etc/simple-file-server/SimpleHTTPServerWithUploadAndAuthentication.py $PORT $ID:$PASSWORD
+EOL
+chmod 700 /etc/init/simple-file-server.conf
+
+mkdir /etc/simple-file-server
+cp SimpleHTTPServerWithUploadAndAuthentication.py /etc/simple-file-server/
+chmod 700 /etc/simple-file-server/SimpleHTTPServerWithUploadAndAuthentication.py
+
+service simple-file-server start
+
+echo "installation completed!"
+echo "check simple-file-server at localhost:"$PORT
