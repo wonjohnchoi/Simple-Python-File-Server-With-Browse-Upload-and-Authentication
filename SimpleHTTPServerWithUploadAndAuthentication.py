@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Simple HTTP Server With Upload.
+"""Simple HTTP Server With Upload and Authentication.
 
 This module builds on BaseHTTPServer by implementing the standard GET
 and HEAD requests in a fairly straightforward manner.
