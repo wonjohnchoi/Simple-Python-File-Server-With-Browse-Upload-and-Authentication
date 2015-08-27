@@ -22,3 +22,7 @@ Check the file server at localhost:PORT
 ###How To Uninstall
 `sudo ./uninstall`
 
+###Credit
+This is a fork of http://li2z.cn/?s=SimpleHTTPServerWithUpload written by bones7456 (who also forked from http://www.opensource.apple.com/source/python/python-3/python/Lib/SimpleHTTPServer.py)
+
+This fork adds install scripts and authentication.
