@@ -4,7 +4,7 @@
 cp simple-file-server.conf /etc/init
 
 mkdir /etc/simple-file-server
-cp SimpleHTTPServerWithUploadAndAuthentication.py /etc/simple-file-server
+cp simple_file_server.py /etc/simple-file-server
 cp settings.py /etc/simple-file-server
 
 service simple-file-server start

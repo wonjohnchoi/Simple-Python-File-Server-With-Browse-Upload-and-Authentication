@@ -7,11 +7,7 @@ and HEAD requests in a fairly straightforward manner.
 
 """
 
-
-__version__ = "0.1"
-__all__ = ["SimpleHTTPRequestHandler"]
 __author__ = "bones7456"
-__home_page__ = "http://li2z.cn/"
 __contributor__ = "wonjohnchoi"
 
 import os
@@ -47,7 +43,6 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     """
 
-    server_version = "SimpleHTTPWithUpload/" + __version__
 
     def do_HEAD(self):
         """Serve a HEAD request."""
@@ -104,7 +99,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         f.write("<br><a href=\"%s\">back</a>" % self.headers['referer'])
         f.write("<hr><small>Powerd By: bones7456, check new version at ")
         f.write("<a href=\"http://li2z.cn/?s=SimpleHTTPServerWithUpload\">")
-        f.write("here</a>.</small></body>\n</html>\n")
+        f.write("</body>\n</html>\n")
         length = f.tell()
         f.seek(0)
         self.send_response(200)
