@@ -6,6 +6,8 @@ This is a simple file server that
 
 It is tested with Ubuntu 14.04, python 2.7.6
 
+Find the latest version at https://github.com/wonjohnchoi/Simple-Python-File-Server-With-Browse-Upload-and-Authentication
+
 ###How To Install
 `sudo chmod 700 install`
 
@@ -19,3 +21,4 @@ Check the file server at localhost:PORT
 
 ###How To Uninstall
 `sudo ./uninstall`
+
