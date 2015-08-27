@@ -9,15 +9,13 @@ It is tested with Ubuntu 14.04, python 2.7.6
 Find the latest version at https://github.com/wonjohnchoi/Simple-Python-File-Server-With-Browse-Upload-and-Authentication
 
 ###How To Install
-`sudo chmod 700 install`
-
-`sudo chmod 700 uninstall`
+Read and edit settings.py.
 
 `sudo ./install`
 
-Once the installation is complete, this file server is registered as an upstart service.
+Once the script is completed, this file server should be registered as an upstart service.
 
-Check the file server at localhost:PORT
+Check the file server at http://host:port/base_url
 
 ###How To Uninstall
 `sudo ./uninstall`

@@ -28,8 +28,10 @@ except ImportError:
     from StringIO import StringIO
 import sys
 import base64
+import settings
 
-key = ""
+def key():
+    return base64.b64encode('%s:%s' % (settings.username, settings.password))
 
 class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
@@ -54,9 +56,8 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             f.close()
 
     def is_authenticated(self):
-        global key
         auth_header = self.headers.getheader('Authorization')
-        return auth_header and auth_header == 'Basic ' + key
+        return auth_header and auth_header == 'Basic ' + key()
 
     def do_AUTHHEAD(self):
         self.send_response(401)
@@ -246,9 +247,9 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return f
 
     def translate_path(self, path):
-        # '/fs/' => '/'
-        # '/fs/home/' => '/home/'
-        return path[3:]
+        # 'base_url/' => '/'
+        # 'base_url/home/' => '/home/'
+        return path[len(settings.base_url):]
 
         """Translate a /-separated PATH to the local filename syntax.
 
@@ -322,13 +323,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         })
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print 'usage SimpleHTTPServerWithUploadAndAuthentication.py [port] [username:password]'
-    else:
-        port = int(sys.argv[1])
-        key = base64.b64encode(sys.argv[2])
-        print 'listening on localhost:%d with key %s' %(port, key)
-        server = BaseHTTPServer.HTTPServer(('localhost', port), SimpleHTTPRequestHandler)
-
-        print 'Starting server, use <Ctrl-C> to stop'
-        server.serve_forever()
+    print 'listening on %s:%d with key %s' %(settings.host, settings.port, key())
+    server = BaseHTTPServer.HTTPServer((settings.host, settings.port), SimpleHTTPRequestHandler)
+    print 'Starting server, use <Ctrl-C> to stop'
+    server.serve_forever()
