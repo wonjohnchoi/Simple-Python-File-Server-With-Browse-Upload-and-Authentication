@@ -1,4 +1,4 @@
-#Simple File Server
+#Simple Python File Server With Browse, Upload, and Authentication
 This is a simple file server that
 * supports file directory browse of the server
 * supports file upload to the server
