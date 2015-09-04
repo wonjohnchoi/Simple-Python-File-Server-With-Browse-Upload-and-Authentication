@@ -29,6 +29,37 @@ import settings
 def key():
     return base64.b64encode('%s:%s' % (settings.username, settings.password))
 
+class Counter:
+    ''' instantiate only once '''
+    def __init__(self):
+        import sqlite3
+        print 'making sqlite3 database'
+        self.conn = sqlite3.connect('/etc/simple-file-server/simple-file-server.db')
+        self.cursor = self.conn.cursor()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS counter
+                  (fullpath text primary key, count integer)''')
+
+    def incr_counter(self, path):
+        """ Increase the counter that counts how many times a path is visited """
+        path = os.path.normpath(path)
+        res = self.read_counter(path)
+        # print 'incr_counter:', path, res, '->', res + 1
+        res += 1
+        self.cursor.execute('REPLACE INTO counter(fullpath, count) VALUES(?, ?)', (path, res))
+        self.conn.commit()
+        pass
+
+    def read_counter(self, path):
+        """ Read the counter that counts how many times a path is visited """
+        path = os.path.normpath(path)
+        self.cursor.execute('SELECT * FROM "counter" WHERE "fullpath"=?', (path,))
+        row = self.cursor.fetchone()
+        count = 0
+        if row != None : count = row[1]
+        # print 'read_counter:', path, count
+        return count
+
+
 class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     """Simple HTTP request handler with GET/HEAD/POST commands.
@@ -42,7 +73,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     request omits the actual contents of the file.
 
     """
-
+    counter = Counter()
 
     def do_HEAD(self):
         """Serve a HEAD request."""
@@ -176,9 +207,11 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     path = index
                     break
             else:
+                self.counter.incr_counter(path)
                 return self.list_directory(path)
+        self.counter.incr_counter(path)
         ctype = self.guess_type(path)
-        print self.path, path
+
         try:
             # Always read in binary mode. Opening files in text mode may cause
             # newline translations, making the actual size of the content
@@ -209,17 +242,30 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_error(404, "No permission to list directory")
             return None
         list.sort(key=lambda a: a.lower())
-        list = ['..'] + list
+        if path != '/':
+            list = ['..'] + list
         f = StringIO()
         displaypath = cgi.escape(urllib.unquote(self.path))
         f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
         f.write("<html>\n<title>Directory listing for %s</title>\n" % displaypath)
-        f.write("<body>\n<h2>Directory listing for %s</h2>\n" % displaypath)
+        f.write("<body>\n<h2>Directory listing for %s (frequently used directories are more reddish)</h2>\n" % displaypath)
         f.write("<hr>\n")
         f.write("<form ENCTYPE=\"multipart/form-data\" method=\"post\">")
         f.write("<input name=\"file\" type=\"file\"/>")
         f.write("<input type=\"submit\" value=\"upload\"/></form>\n")
         f.write("<hr>\n<ul>\n")
+        tot_counts = 0
+        for name in list:
+            fullname = os.path.join(path, name)
+            linkname = name
+            if os.path.isdir(fullname):
+                linkname = name + "/"
+            rel_path = urllib.quote(linkname) # relative href
+            abs_path = path + rel_path
+            counts = self.counter.read_counter(abs_path)
+            tot_counts += counts
+        if tot_counts == 0:
+            tot_counts += 1
         for name in list:
             fullname = os.path.join(path, name)
             displayname = linkname = name
@@ -230,8 +276,13 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if os.path.islink(fullname):
                 displayname = name + "@"
                 # Note: a link to a directory displays with @ and links with /
-            f.write('<li><a href="%s">%s</a>\n'
-                    % (urllib.quote(linkname), cgi.escape(displayname)))
+            rel_path = urllib.quote(linkname) # relative href
+            abs_path = path + rel_path
+            counts = self.counter.read_counter(abs_path)
+            # red portion of rgb value. with **0.2, it's overall more reddish
+            rgb_r = 255 * (float(counts) / tot_counts) ** 0.2
+            f.write('<li><a style="color:rgb(%d,0,0)" href="%s">%s</a>\n'
+                    % (rgb_r, rel_path, cgi.escape(displayname)))
         f.write("</ul>\n<hr>\n</body>\n</html>\n")
         length = f.tell()
         f.seek(0)
