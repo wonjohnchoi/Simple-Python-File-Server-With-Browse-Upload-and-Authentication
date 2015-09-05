@@ -34,14 +34,13 @@ class Counter:
     def __init__(self):
         import sqlite3
         print 'making sqlite3 database'
-        self.conn = sqlite3.connect('/etc/simple-file-server/simple-file-server.db')
+        self.conn = sqlite3.connect('simple-file-server.db')
         self.cursor = self.conn.cursor()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS counter
                   (fullpath text primary key, count integer)''')
 
     def incr_counter(self, path):
         """ Increase the counter that counts how many times a path is visited """
-        path = os.path.normpath(path)
         res = self.read_counter(path)
         # print 'incr_counter:', path, res, '->', res + 1
         res += 1
@@ -51,7 +50,6 @@ class Counter:
 
     def read_counter(self, path):
         """ Read the counter that counts how many times a path is visited """
-        path = os.path.normpath(path)
         self.cursor.execute('SELECT * FROM "counter" WHERE "fullpath"=?', (path,))
         row = self.cursor.fetchone()
         count = 0
@@ -153,7 +151,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         fn = re.findall(r'Content-Disposition.*name="file"; filename="(.*)"', line)
         if not fn:
             return (False, "Can't find out file name...")
-        path = self.translate_path(self.path)
+        path = self.url_path_to_file_path(self.path)
         fn = os.path.join(path, fn[0])
         line = self.rfile.readline()
         remainbytes -= len(line)
@@ -192,9 +190,11 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         None, in which case the caller has nothing further to do.
 
         """
-        path = self.translate_path(self.path)
+        print 'url_path', self.path
+        file_path = self.url_path_to_file_path(self.path)
+        print 'file_path', file_path
         f = None
-        if os.path.isdir(path):
+        if os.path.isdir(file_path):
             if not self.path.endswith('/'):
                 # redirect browser - doing basically what apache does
                 self.send_response(301)
@@ -202,23 +202,24 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self.end_headers()
                 return None
             for index in "index.html", "index.htm":
-                index = os.path.join(path, index)
+                index = os.path.join(file_path, index)
                 if os.path.exists(index):
-                    path = index
+                    file_path = index
                     break
-            else:
-                self.counter.incr_counter(path)
-                return self.list_directory(path)
-        self.counter.incr_counter(path)
-        ctype = self.guess_type(path)
+
+        self.counter.incr_counter(file_path)
+
+        if os.path.isdir(file_path):
+            return self.list_directory(file_path)
+        ctype = self.guess_type(file_path)
 
         try:
             # Always read in binary mode. Opening files in text mode may cause
             # newline translations, making the actual size of the content
             # transmitted *less* than the content-length!
-            f = open(path, 'rb')
+            f = open(file_path, 'rb')
         except IOError:
-            self.send_error(404, "File not found")
+            self.send_error(404, "File not found " + file_path)
             return None
         self.send_response(200)
         self.send_header("Content-type", ctype)
@@ -228,7 +229,7 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         return f
 
-    def list_directory(self, path):
+    def list_directory(self, dir_path):
         """Helper to produce a directory listing (absent index.html).
 
         Return value is either a file object, or None (indicating an
@@ -237,12 +238,12 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         """
         try:
-            list = os.listdir(path)
+            list = os.listdir(dir_path)
         except os.error:
             self.send_error(404, "No permission to list directory")
             return None
         list.sort(key=lambda a: a.lower())
-        if path != '/':
+        if dir_path != '/':
             list = ['..'] + list
         f = StringIO()
         displaypath = cgi.escape(urllib.unquote(self.path))
@@ -254,35 +255,33 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         f.write("<input name=\"file\" type=\"file\"/>")
         f.write("<input type=\"submit\" value=\"upload\"/></form>\n")
         f.write("<hr>\n<ul>\n")
+
         tot_counts = 0
         for name in list:
-            fullname = os.path.join(path, name)
-            linkname = name
-            if os.path.isdir(fullname):
-                linkname = name + "/"
-            rel_path = urllib.quote(linkname) # relative href
-            abs_path = path + rel_path
-            counts = self.counter.read_counter(abs_path)
+            child_file_path = posixpath.normpath(os.path.join(dir_path, name))
+            counts = self.counter.read_counter(child_file_path)
+            print child_file_path, counts
             tot_counts += counts
+
+        # avoid divide by zero error
         if tot_counts == 0:
             tot_counts += 1
+
         for name in list:
-            fullname = os.path.join(path, name)
+            child_file_path = posixpath.normpath(os.path.join(dir_path, name))
             displayname = linkname = name
             # Append / for directories or @ for symbolic links
-            if os.path.isdir(fullname):
+            if os.path.isdir(child_file_path):
                 displayname = name + "/"
                 linkname = name + "/"
-            if os.path.islink(fullname):
+            if os.path.islink(child_file_path):
                 displayname = name + "@"
                 # Note: a link to a directory displays with @ and links with /
-            rel_path = urllib.quote(linkname) # relative href
-            abs_path = path + rel_path
-            counts = self.counter.read_counter(abs_path)
+            counts = self.counter.read_counter(child_file_path)
             # red portion of rgb value. with **0.2, it's overall more reddish
             rgb_r = 255 * (float(counts) / tot_counts) ** 0.2
             f.write('<li><a style="color:rgb(%d,0,0)" href="%s">%s</a>\n'
-                    % (rgb_r, rel_path, cgi.escape(displayname)))
+                    % (rgb_r, urllib.quote(linkname), cgi.escape(displayname)))
         f.write("</ul>\n<hr>\n</body>\n</html>\n")
         length = f.tell()
         f.seek(0)
@@ -292,31 +291,18 @@ class SimpleHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         return f
 
-    def translate_path(self, path):
+    def url_path_to_file_path(self, url_path):
         # 'base_url/' => '/'
-        # 'base_url/home/' => '/home/'
-        return path[len(settings.base_url):]
-
-        """Translate a /-separated PATH to the local filename syntax.
-
-        Components that mean special things to the local file system
-        (e.g. drive or directory names) are ignored.  (XXX They should
-        probably be diagnosed.)
-
-        """
+        # 'base_url/home/' => '/home'
+        # 'base_url/home/test/' => '/home/test'
+        # 'base_url/home/test.zip' => '/home/test.zip'
+        # 'base_url/home/%22test%22/' => '/home/"test"'
+        url_path = url_path[len(settings.base_url):]
         # abandon query parameters
-        path = path.split('?',1)[0]
-        path = path.split('#',1)[0]
-        path = posixpath.normpath(urllib.unquote(path))
-        words = path.split('/')
-        words = filter(None, words)
-        path = os.getcwd()
-        for word in words:
-            drive, word = os.path.splitdrive(word)
-            head, word = os.path.split(word)
-            if word in (os.curdir, os.pardir): continue
-            path = os.path.join(path, word)
-        return path
+        url_path = url_path.split('?',1)[0]
+        url_path = url_path.split('#',1)[0]
+        url_path = posixpath.normpath(urllib.unquote(url_path))
+        return url_path
 
     def copyfile(self, source, outputfile):
         """Copy all data between two file objects.
